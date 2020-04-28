@@ -1,6 +1,8 @@
+require("dotenv").config();
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const WebSocketClient = require("websocket").client;
-
 const mic = require("mic");
+const request = require("request");
 
 const micInstance = mic({
   rate: "44100",
@@ -43,18 +45,18 @@ ws.on("connect", (connection) => {
       type: "start_request",
       insightTypes: ["question", "action_item"],
       config: {
-        confidenceThreshold: 0.8,
+        confidenceThreshold: 0.5,
         timezoneOffset: 480, // Your timezone offset from UTC in minutes
         languageCode: "en-US",
         speechRecognition: {
           encoding: "LINEAR16",
           sampleRateHertz: 44100, // Make sure the correct sample rate is provided for best results
         },
-        meetingTitle: "Client Meeting",
+        meetingTitle: "Sample Demo Meeting",
       },
       speaker: {
-        userId: "your_email_id",
-        name: "your_name",
+        userId: process.env.USER_EMAIL,
+        name: process.env.USER_NAME,
       },
     })
   );
@@ -63,7 +65,7 @@ ws.on("connect", (connection) => {
     connection.send(data);
   });
 
-  // Schedule the stop of the client after 10 seconds
+  // Schedule the stop of the client after 60 seconds
   setTimeout(() => {
     micInstance.stop();
     // Send stop request
@@ -76,6 +78,36 @@ ws.on("connect", (connection) => {
   }, 60000);
 });
 
-ws.connect("wss://api.symbl.ai/v1/realtime/insights/1", null, null, {
-  "X-API-KEY": "<your_auth_token>",
+// Generate Auth Token
+
+const options = {
+  method: "POST",
+  url: "https://api.symbl.ai/oauth2/token:generate",
+  headers: {
+    "Content-Type": ["application/json", "text/plain"],
+  },
+  body: JSON.stringify({
+    type: "application",
+    appId: process.env.APP_ID,
+    appSecret: process.env.APP_SECRET,
+  }),
+};
+
+request(options, function (error, response) {
+  if (error) throw new Error(error);
+
+  if (response.body) {
+    const { accessToken } = JSON.parse(response.body);
+    const realTimeSessionId = "session-1234"; // This should be a Unique ID and must be same for all the participants in single session. Use a good randomizer like UUIDs
+    ws.connect(
+      `wss://api.symbl.ai/v1/realtime/insights/${realTimeSessionId}`,
+      null,
+      null,
+      {
+        "X-API-KEY": accessToken,
+      }
+    );
+  } else {
+    throw new Error("Access token not available");
+  }
 });
